@@ -115,3 +115,48 @@ class KerasMLP:
 
 def make_mlp(random_state: int = 42) -> KerasMLP:
     return KerasMLP(random_state=random_state)
+
+
+class KerasLSTM:
+    """Minimal sklearn-style wrapper around a Keras 3 LSTM regressor.
+
+    Expects 3D input of shape (samples, lookback, n_features). Built for the
+    sequence walk-forward path in evaluation.walk_forward_predict_seq.
+    """
+
+    def __init__(self, units=16, dropout=0.1, epochs=200,
+                 batch_size=16, patience=20, random_state=42):
+        self.units = units
+        self.dropout = dropout
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.patience = patience
+        self.random_state = random_state
+        self.model_ = None
+
+    def fit(self, X, y):
+        import keras
+
+        keras.utils.set_random_seed(self.random_state)
+        X = np.asarray(X, dtype="float32")
+        y = np.asarray(y, dtype="float32")
+        self.model_ = keras.Sequential([
+            keras.layers.Input(shape=(X.shape[1], X.shape[2])),
+            keras.layers.LSTM(self.units),
+            keras.layers.Dropout(self.dropout),
+            keras.layers.Dense(1, activation="linear"),
+        ])
+        self.model_.compile(optimizer="adam", loss="mse")
+        cb = [keras.callbacks.EarlyStopping(
+            monitor="loss", patience=self.patience, restore_best_weights=True)]
+        self.model_.fit(X, y, epochs=self.epochs, batch_size=self.batch_size,
+                        verbose=0, callbacks=cb)
+        return self
+
+    def predict(self, X):
+        X = np.asarray(X, dtype="float32")
+        return self.model_.predict(X, verbose=0).ravel()
+
+
+def make_lstm(random_state: int = 42) -> KerasLSTM:
+    return KerasLSTM(random_state=random_state)
