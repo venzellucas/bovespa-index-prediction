@@ -19,6 +19,11 @@ import os
 os.environ.setdefault("KERAS_BACKEND", "torch")
 
 import numpy as np
+
+# Import LightGBM eagerly, before Keras/torch can load lazily. Both bundle their
+# own OpenMP runtime; on macOS loading torch's first and LightGBM's second
+# crashes the process, but this order (LightGBM first) is stable.
+import lightgbm  # noqa: F401
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression
 

@@ -17,12 +17,15 @@ warnings.filterwarnings("ignore")
 from src.data import load_prices
 from src.features import RV_WINDOWS, build_dataset, build_volatility_dataset
 from src.evaluation import (
+    arima_forward_vol,
     baseline_predictions,
+    garch_forward_vol,
     regression_metrics,
     summarize,
     walk_forward_predict,
+    walk_forward_predict_seq,
 )
-from src.models import make_gbr, make_har, make_mlp
+from src.models import make_gbr, make_har, make_lgbm, make_lstm, make_mlp
 
 
 def _row(name: str, m: dict) -> str:
@@ -51,15 +54,25 @@ def return_task(prices) -> None:
 def volatility_task(prices) -> None:
     X, y = build_volatility_dataset(prices, non_overlapping=True)
     har_cols = [f"BV_RV{w}" for w in RV_WINDOWS]
+    close = prices["BV"]["Close"]
     print(f"\n== TASK 2: 1-week realized VOLATILITY ({X.shape[0]} weekly samples, log-target) ==")
     print(f"{'predictor':<22} {'r2':>9} {'rmse':>9} {'mae':>9}")
+    # naive baselines
     for kind in ("train_mean", "persistence"):
         print(_reg_row(f"baseline:{kind}", baseline_predictions(X, y, kind=kind)))
+    # time-series-native benchmarks
     print(_reg_row("HAR-RV (OLS)",
                    walk_forward_predict(make_har, X[har_cols], y, scale=False, log_target=True)))
-    for name, fac in (("GBR (log)", make_gbr), ("MLP ReLU (log)", make_mlp)):
+    print(_reg_row("ARIMA(2,0,1)", arima_forward_vol(y)))
+    print(_reg_row("GARCH(1,1)", garch_forward_vol(close, y)))
+    # gradient boosters on indicator + HAR features
+    for name, fac in (("GBR (log)", make_gbr), ("LightGBM (log)", make_lgbm)):
         print(_reg_row(name, walk_forward_predict(fac, X, y, scale=True, log_target=True)))
-    print("  -> GBR (R2 ~0.16) beats naive persistence (~0.09): volatility IS forecastable.")
+    # neural nets (underperform on this small dataset)
+    print(_reg_row("MLP ReLU (log)", walk_forward_predict(make_mlp, X, y, scale=True, log_target=True)))
+    print(_reg_row("LSTM (lookback=4)", walk_forward_predict_seq(make_lstm, X, y, lookback=4)))
+    print("  -> GARCH (R2 ~0.27) leads, then ARIMA (~0.22) and the boosters (~0.15);")
+    print("     all beat naive persistence (~0.09). Neural nets trail on so few samples.")
 
 
 if __name__ == "__main__":
