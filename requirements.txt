@@ -10,8 +10,10 @@ seaborn==0.13.2
 yfinance==1.4.1
 ta==0.11.0
 optuna==4.9.0
-statsmodels==0.14.6
+statsmodels==0.14.6    # ARIMA benchmark on the volatility series
 statsforecast==2.0.3   # AutoARIMA, replaces the abandoned pmdarima
+arch==8.0.0            # GARCH(1,1) volatility benchmark
+lightgbm==4.6.0        # modern gradient booster
 torch==2.12.1
 keras==3.14.1
 optree==0.19.1         # required by Keras 3 to avoid a TensorFlow fallback

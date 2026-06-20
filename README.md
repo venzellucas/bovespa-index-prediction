@@ -25,9 +25,22 @@ fixes them and re-asks the question honestly:
 
 - **Return direction is not predictable.** Once leakage and target-overlap are
   removed, no model beats the ~0.54 up-week base rate (R² ≈ 0).
-- **Realized volatility *is* predictable.** Reframing the target to next-week
-  realized volatility, Gradient Boosting on log-volatility reaches **R² ≈ 0.16**,
-  beating the naive persistence baseline (**≈ 0.09**) — an honest positive result.
+- **Realized volatility *is* predictable**, and the model ranking is instructive:
+
+  | model (1-week realized volatility) | R² | RMSE | MAE |
+  |---|---:|---:|---:|
+  | **GARCH(1,1)** | **0.272** | 0.00758 | 0.00476 |
+  | ARIMA(2,0,1) | 0.224 | 0.00783 | 0.00422 |
+  | Gradient Boosting (log) | 0.156 | 0.00816 | 0.00462 |
+  | LightGBM (log) | 0.149 | 0.00820 | 0.00462 |
+  | baseline: persistence | 0.088 | 0.00849 | 0.00532 |
+  | HAR-RV (OLS) | −0.285 | 0.01007 | 0.00469 |
+  | MLP (ReLU, log) | −0.736 | 0.01171 | 0.00679 |
+  | LSTM (lookback 4) | −1.864 | 0.01504 | 0.01045 |
+
+  The purpose-built econometric models (GARCH, ARIMA) lead; gradient boosters add
+  modest value over naive persistence; and the neural nets *trail* — an honest
+  reminder that ~960 weekly samples is far too little for deep sequence models.
 
 Reproduce both tables with `python run_experiment.py`.
 
@@ -36,8 +49,9 @@ Reproduce both tables with `python run_experiment.py`.
 ```
 src/data.py         cached yfinance loader (Ibovespa, S&P 500, USD/BRL)
 src/features.py     technical indicators, return + volatility targets, HAR-RV
-src/evaluation.py   walk-forward splits, per-fold scaling, metrics, baselines
-src/models.py       GBR, ReLU MLP (Keras 3), HAR-RV OLS
+src/evaluation.py   walk-forward (tabular + sequence), per-fold scaling, metrics,
+                    baselines, GARCH and ARIMA volatility benchmarks
+src/models.py       GBR, LightGBM, ReLU MLP, LSTM (Keras 3), HAR-RV OLS
 run_experiment.py   reproduces the full comparison
 TGII.ipynb          original 2021 thesis notebook (unchanged)
 ```
