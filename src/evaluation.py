@@ -88,11 +88,15 @@ def walk_forward_predict(
     y: pd.Series,
     *,
     scale: bool = True,
+    log_target: bool = False,
     test_years: range = range(2016, 2026),
 ) -> pd.DataFrame:
     """Run a model across walk-forward folds, scaling per fold (no leakage).
 
-    Returns a tidy frame indexed by date with columns [y_true, y_pred, year].
+    With log_target=True the model is fit on log(y) and predictions are
+    exponentiated back -- the standard transform for strictly-positive,
+    right-skewed targets like realized volatility. Returns a tidy frame indexed
+    by date with columns [y_true, y_pred, year].
     """
     rows = []
     Xv, yv = X.to_numpy(dtype=float), y.to_numpy(dtype=float)
@@ -101,9 +105,12 @@ def walk_forward_predict(
         if scale:
             scaler = StandardScaler().fit(X_tr)  # fit on TRAIN ONLY
             X_tr, X_te = scaler.transform(X_tr), scaler.transform(X_te)
+        y_tr = np.log(yv[tr]) if log_target else yv[tr]
         model = make_model()
-        model.fit(X_tr, yv[tr])
+        model.fit(X_tr, y_tr)
         pred = np.asarray(model.predict(X_te)).ravel()
+        if log_target:
+            pred = np.exp(pred)
         rows.append(pd.DataFrame(
             {"y_true": yv[te], "y_pred": pred, "year": year},
             index=X.index[te],

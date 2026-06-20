@@ -20,6 +20,16 @@ os.environ.setdefault("KERAS_BACKEND", "torch")
 
 import numpy as np
 from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.linear_model import LinearRegression
+
+
+def make_har() -> LinearRegression:
+    """HAR-RV benchmark: ordinary least squares on realized-vol features.
+
+    The literature reference for volatility forecasting. Intended to be run on a
+    feature matrix restricted to the trailing realized-vol columns (RV5/22/66).
+    """
+    return LinearRegression()
 
 
 def make_gbr(random_state: int = 42) -> GradientBoostingRegressor:
