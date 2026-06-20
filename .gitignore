@@ -1,0 +1,16 @@
+# Environment
+.venv/
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Data / model artifacts
+data/cache/
+*.joblib
+*.keras
+
+# OS
+.DS_Store

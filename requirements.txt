@@ -1,0 +1,17 @@
+# Bovespa Index Prediction — modernized stack (rebuilt 2026)
+# Original thesis (2021) ran on pmdarima + tf.keras; this pins the current
+# equivalents. Keras 3 runs on the torch backend (set KERAS_BACKEND=torch).
+numpy==2.4.6
+pandas==2.3.3
+scipy==1.15.3
+scikit-learn==1.9.0
+matplotlib==3.11.0
+seaborn==0.13.2
+yfinance==1.4.1
+ta==0.11.0
+optuna==4.9.0
+statsmodels==0.14.6
+statsforecast==2.0.3   # AutoARIMA, replaces the abandoned pmdarima
+torch==2.12.1
+keras==3.14.1
+optree==0.19.1         # required by Keras 3 to avoid a TensorFlow fallback
