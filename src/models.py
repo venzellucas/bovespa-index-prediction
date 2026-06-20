@@ -45,6 +45,29 @@ def make_gbr(random_state: int = 42) -> GradientBoostingRegressor:
     )
 
 
+def make_lgbm(random_state: int = 42):
+    """LightGBM regressor -- the modern gradient booster (post-2021 standard).
+
+    A faster, histogram-based alternative to sklearn's GBR with leaf-wise growth
+    and built-in regularization. Conservative settings to suit the small,
+    low-signal weekly dataset.
+    """
+    from lightgbm import LGBMRegressor
+
+    return LGBMRegressor(
+        n_estimators=400,
+        learning_rate=0.02,
+        num_leaves=15,
+        subsample=0.8,
+        subsample_freq=1,
+        colsample_bytree=0.8,
+        min_child_samples=20,
+        reg_lambda=1.0,
+        random_state=random_state,
+        verbosity=-1,
+    )
+
+
 class KerasMLP:
     """Minimal sklearn-style wrapper around a Keras 3 MLP regressor (ReLU)."""
 
