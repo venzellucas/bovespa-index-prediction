@@ -9,8 +9,12 @@ was a leakage bug in the original 2021 notebook.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 from ta import momentum, trend
+
+# Trailing realized-volatility windows (HAR-RV style): week, month, quarter.
+RV_WINDOWS: tuple[int, ...] = (5, 22, 66)
 
 # Indicator columns produced by add_indicators(), in a stable order.
 FEATURE_NAMES: list[str] = ["MACD", "RSI", "ADX", "Aroon", "CCI", "DPO", "MI", "TRIX"]
@@ -45,6 +49,60 @@ def forward_return(close: pd.Series, horizon: int = 5) -> pd.Series:
     artifacts of the original. The last `horizon` rows are NaN (no future yet).
     """
     return close.shift(-horizon) / close - 1.0
+
+
+def log_returns(close: pd.Series) -> pd.Series:
+    return np.log(close).diff()
+
+
+def trailing_rv(close: pd.Series, window: int) -> pd.Series:
+    """Realized volatility over the trailing `window` days (causal feature)."""
+    return log_returns(close).rolling(window).std()
+
+
+def forward_rv(close: pd.Series, horizon: int = 5) -> pd.Series:
+    """Realized volatility over the *next* `horizon` days: std of r[t+1..t+h].
+
+    This is the volatility target. rolling(h).std().shift(-h) places the
+    forward-window std at time t; the last `horizon` rows are NaN.
+    """
+    return log_returns(close).rolling(horizon).std().shift(-horizon)
+
+
+def add_rv_features(close: pd.Series, prefix: str) -> pd.DataFrame:
+    """HAR-RV style trailing realized-vol features for one market."""
+    cols = {f"{prefix}_RV{w}": trailing_rv(close, w) for w in RV_WINDOWS}
+    return pd.DataFrame(cols)
+
+
+def build_volatility_dataset(
+    prices: dict[str, pd.DataFrame],
+    *,
+    horizon: int = 5,
+    target_market: str = "BV",
+    non_overlapping: bool = False,
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Modelling table for volatility forecasting.
+
+    X = technical indicators (per market) + HAR-RV trailing realized-vol features
+    (per market). y = forward realized volatility of the target market. Unlike
+    the return target, volatility is genuinely autocorrelated, so the persistence
+    baseline here is a strong and *legitimate* benchmark (the HAR-RV reference),
+    not an overlap artifact.
+    """
+    frames = []
+    for prefix, df in prices.items():
+        feats = add_indicators(df)[FEATURE_NAMES].add_prefix(f"{prefix}_")
+        frames.append(feats)
+        frames.append(add_rv_features(df["Close"], prefix))
+
+    X = pd.concat(frames, axis=1).sort_index()
+    y = forward_rv(prices[target_market]["Close"], horizon=horizon).rename("target")
+
+    combined = X.join(y, how="inner").dropna()
+    if non_overlapping:
+        combined = combined.iloc[::horizon]
+    return combined[X.columns], combined["target"]
 
 
 def build_dataset(
