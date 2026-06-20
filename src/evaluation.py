@@ -150,6 +150,38 @@ def baseline_predictions(X: pd.DataFrame, y: pd.Series, *, kind: str,
     return pd.concat(rows)
 
 
+def garch_forward_vol(
+    close: pd.Series,
+    target: pd.Series,
+    *,
+    horizon: int = 5,
+    test_years: range = range(2016, 2026),
+) -> pd.DataFrame:
+    """GARCH(1,1) forecast of forward realized volatility (econometric benchmark).
+
+    For each evaluation date t (the index of `target`, restricted to test_years),
+    fit a GARCH(1,1) on daily log returns up to t and forecast the next `horizon`
+    daily variances. The prediction is sqrt(mean variance), matching the target's
+    definition (std of the next-h daily returns). Returns can be scaled to percent
+    for the fit and rescaled back, which arch recommends for numerical stability.
+    """
+    from arch import arch_model
+
+    ret = (np.log(close).diff().dropna()) * 100.0
+    dates = target.index[target.index.year.isin(list(test_years))]
+    rows = []
+    for t in dates:
+        hist = ret.loc[:t]
+        if len(hist) < 250:
+            continue
+        res = arch_model(hist, mean="Constant", vol="GARCH", p=1, q=1).fit(disp="off")
+        var = res.forecast(horizon=horizon, reindex=False).variance.values[-1]
+        pred = float(np.sqrt(var.mean())) / 100.0
+        rows.append((t, target.loc[t], pred, t.year))
+    out = pd.DataFrame(rows, columns=["date", "y_true", "y_pred", "year"]).set_index("date")
+    return out
+
+
 def summarize(preds: pd.DataFrame) -> dict[str, float]:
     """Combine regression + directional metrics for a predictions frame."""
     yt, yp = preds["y_true"].to_numpy(), preds["y_pred"].to_numpy()
