@@ -52,6 +52,7 @@ def build_dataset(
     *,
     horizon: int = 5,
     target_market: str = "BV",
+    non_overlapping: bool = False,
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Build the modelling table from {prefix: OHLCV}.
 
@@ -59,6 +60,12 @@ def build_dataset(
     y is the forward return of the target market. Rows with any NaN (indicator
     warm-up at the start, target horizon at the end) are dropped jointly so X and
     y stay aligned.
+
+    With non_overlapping=True the rows are subsampled every `horizon` days so
+    consecutive targets cover disjoint windows. This removes the ~(horizon-1)/horizon
+    autocorrelation that an h-day forward return sampled daily would otherwise have,
+    and is the honest setup for evaluation (a daily sample makes naive persistence
+    look skilful purely from window overlap).
     """
     frames = []
     for prefix, df in prices.items():
@@ -70,6 +77,8 @@ def build_dataset(
     y = forward_return(prices[target_market]["Close"], horizon=horizon).rename("target")
 
     combined = X.join(y, how="inner").dropna()
+    if non_overlapping:
+        combined = combined.iloc[::horizon]
     return combined[X.columns], combined["target"]
 
 
