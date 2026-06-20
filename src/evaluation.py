@@ -118,6 +118,47 @@ def walk_forward_predict(
     return pd.concat(rows)
 
 
+def walk_forward_predict_seq(
+    make_model: ModelFactory,
+    X: pd.DataFrame,
+    y: pd.Series,
+    *,
+    lookback: int = 8,
+    scale: bool = True,
+    log_target: bool = False,
+    test_years: range = range(2016, 2026),
+) -> pd.DataFrame:
+    """Walk-forward for sequence models (LSTM): each sample is the prior
+    `lookback` rows of features. Scaling is fit on the training fold only; test
+    sequences may reach back into earlier rows (past data only, no leakage).
+    """
+    Xv, yv = X.to_numpy(dtype=float), y.to_numpy(dtype=float)
+    idx = X.index
+    rows = []
+    for year, tr, _va, te in walk_forward_splits(idx, test_years=test_years):
+        Xs = StandardScaler().fit(Xv[tr]).transform(Xv) if scale else Xv
+
+        def build(positions):
+            keep = [p for p in positions if p - lookback + 1 >= 0]
+            if not keep:
+                return None, None, None
+            seq = np.stack([Xs[p - lookback + 1: p + 1] for p in keep])
+            return seq, yv[keep], keep
+
+        X_tr, y_tr, _ = build(tr)
+        X_te, y_te, pos_te = build(te)
+        if X_tr is None or X_te is None:
+            continue
+        model = make_model()
+        model.fit(X_tr, np.log(y_tr) if log_target else y_tr)
+        pred = np.asarray(model.predict(X_te)).ravel()
+        if log_target:
+            pred = np.exp(pred)
+        rows.append(pd.DataFrame(
+            {"y_true": y_te, "y_pred": pred, "year": year}, index=idx[pos_te]))
+    return pd.concat(rows)
+
+
 # --- Naive baselines -------------------------------------------------------
 
 def baseline_predictions(X: pd.DataFrame, y: pd.Series, *, kind: str,
@@ -180,6 +221,37 @@ def garch_forward_vol(
         rows.append((t, target.loc[t], pred, t.year))
     out = pd.DataFrame(rows, columns=["date", "y_true", "y_pred", "year"]).set_index("date")
     return out
+
+
+def arima_forward_vol(
+    target: pd.Series,
+    *,
+    order: tuple[int, int, int] = (2, 0, 1),
+    test_years: range = range(2016, 2026),
+) -> pd.DataFrame:
+    """ARIMA benchmark on the (log) realized-volatility series itself.
+
+    A univariate autoregressive reference: at each evaluation date t, fit an
+    ARIMA on log-volatility history strictly before t and forecast one step. This
+    is the fair time-series counterpart to GARCH -- richer than persistence, but
+    using only the past volatility series (no exogenous features).
+    """
+    from statsmodels.tsa.arima.model import ARIMA
+
+    logv = np.log(target)
+    dates = target.index[target.index.year.isin(list(test_years))]
+    rows = []
+    for t in dates:
+        hist = logv.loc[:t].iloc[:-1]  # strictly before t
+        if len(hist) < 60:
+            continue
+        try:
+            res = ARIMA(hist.to_numpy(), order=order).fit()
+            pred = float(np.exp(res.forecast(1)[0]))
+        except Exception:
+            continue
+        rows.append((t, target.loc[t], pred, t.year))
+    return pd.DataFrame(rows, columns=["date", "y_true", "y_pred", "year"]).set_index("date")
 
 
 def summarize(preds: pd.DataFrame) -> dict[str, float]:
